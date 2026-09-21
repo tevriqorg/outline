@@ -95,7 +95,7 @@ function ApiKeys() {
       try {
         await team.save({
           preferences: {
-            ...team.preferences,
+            ...(team.preferences ?? {}),
             [TeamPreference.MembersCanCreateApiKey]: checked,
           },
         });
@@ -170,7 +170,7 @@ function ApiKeys() {
         >
           <Switch
             checked={
-              !!team.preferences[TeamPreference.MembersCanCreateApiKey]
+              !!team.preferences?.[TeamPreference.MembersCanCreateApiKey]
             }
             onChange={handleMembersCanCreateApiKeyChange}
           />
