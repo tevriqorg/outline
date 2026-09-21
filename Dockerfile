@@ -11,6 +11,9 @@ FROM node:26.3.0-slim AS runner
 LABEL org.opencontainers.image.source="https://github.com/outline/outline"
 
 ARG APP_PATH
+# Optional Debian mirror for networks with slow access to deb.debian.org.
+# Empty by default, so the upstream build behaviour is unchanged.
+ARG DEBIAN_MIRROR
 WORKDIR $APP_PATH
 ENV NODE_ENV=production
 
@@ -33,7 +36,12 @@ COPY --from=base --chown=nodejs:nodejs $APP_PATH/.sequelizerc ./.sequelizerc
 COPY --from=base --chown=nodejs:nodejs $APP_PATH/node_modules ./node_modules
 COPY --from=base --chown=nodejs:nodejs $APP_PATH/package.json ./package.json
 # Install wget to healthcheck the server
-RUN  apt-get update \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$f" ]; then sed -i -E "s|https?://deb\.debian\.org|${DEBIAN_MIRROR}|g" "$f"; fi; \
+      done; \
+    fi && \
+    apt-get update \
     && apt-get install -y wget \
     && rm -rf /var/lib/apt/lists/*
 
