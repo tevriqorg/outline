@@ -2,23 +2,39 @@ ARG APP_PATH=/opt/outline
 FROM node:26.3.0 AS deps
 
 ARG APP_PATH
+# Optional package mirrors for networks with slow or unstable access to the
+# official Debian/npm endpoints. Both default to empty, which leaves the
+# upstream build behaviour unchanged (the official endpoints stay in place).
+ARG DEBIAN_MIRROR
+ARG NPM_REGISTRY
 WORKDIR $APP_PATH
 COPY ./package.json ./yarn.lock ./.yarnrc.yml ./
 COPY ./patches ./patches
 
-RUN apt-get update && apt-get install -y cmake
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$f" ]; then sed -i -E "s|https?://deb\.debian\.org|${DEBIAN_MIRROR}|g" "$f"; fi; \
+      done; \
+    fi && \
+    apt-get update && apt-get install -y cmake
 ENV NODE_OPTIONS="--max-old-space-size=24000"
 
-RUN npm install -g corepack
+RUN NPM_CONFIG_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}" npm install -g corepack
 RUN corepack enable
-RUN yarn install --immutable --network-timeout 1000000 && \
+# COREPACK_NPM_REGISTRY covers corepack fetching the pinned yarn release itself;
+# YARN_NPM_REGISTRY_SERVER covers the dependency fetch below.
+RUN COREPACK_NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}" \
+    YARN_NPM_REGISTRY_SERVER="${NPM_REGISTRY:-https://registry.yarnpkg.com}" \
+    yarn install --immutable --network-timeout 1000000 && \
   yarn cache clean
 
 COPY . .
 ARG CDN_URL
 RUN yarn build
 
-RUN yarn workspaces focus --production && \
+RUN COREPACK_NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}" \
+    YARN_NPM_REGISTRY_SERVER="${NPM_REGISTRY:-https://registry.yarnpkg.com}" \
+    yarn workspaces focus --production && \
   yarn cache clean
 
 ENV PORT=3000
