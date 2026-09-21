@@ -45,9 +45,6 @@ COPY --from=base --chown=nodejs:nodejs $APP_PATH/package.json ./package.json
 COPY --from=base /etc/ssl /etc/ssl
 COPY --from=base /usr/lib/ssl /usr/lib/ssl
 COPY --from=base /usr/share/ca-certificates /usr/share/ca-certificates
-# a local copy and needs no network access.
-COPY --from=base /etc/ssl/certs /etc/ssl/certs
-COPY --from=base /usr/share/ca-certificates /usr/share/ca-certificates
 # Install wget to healthcheck the server
 RUN if [ -n "$DEBIAN_MIRROR" ]; then \
       for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
