@@ -25,19 +25,28 @@ router.post(
   validate(T.APIKeysCreateSchema),
   transaction(),
   async (ctx: APIContext<T.APIKeysCreateReq>) => {
-    const { name, scope, expiresAt } = ctx.input.body;
-    const { user } = ctx.state.auth;
+    const { userId, name, scope, expiresAt } = ctx.input.body;
+    const { user: actor } = ctx.state.auth;
 
-    authorize(user, "createApiKey", user.team);
+    authorize(actor, "createApiKey", actor.team);
+
+    const owner = userId ? await User.findByPk(userId) : actor;
+    if (!owner) {
+      ctx.throw(404, "User not found");
+    }
+
+    if (owner.id !== actor.id) {
+      authorize(actor, "listApiKeys", owner);
+    }
 
     const apiKey = await ApiKey.createWithCtx(ctx, {
       name,
-      userId: user.id,
+      userId: owner.id,
       expiresAt,
       scope,
     });
 
-    apiKey.user = user;
+    apiKey.user = owner;
 
     ctx.body = {
       data: presentApiKey(apiKey),
