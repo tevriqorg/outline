@@ -12,7 +12,7 @@ LABEL org.opencontainers.image.source="https://github.com/outline/outline"
 
 ARG APP_PATH
 # Optional Debian mirror for networks with slow access to deb.debian.org.
-# Empty by default, so the upstream build behaviour is unchanged.
+# Empty by default, so the upstream package endpoints are left untouched.
 ARG DEBIAN_MIRROR
 WORKDIR $APP_PATH
 ENV NODE_ENV=production
@@ -35,6 +35,19 @@ COPY --from=base --chown=nodejs:nodejs $APP_PATH/public ./public
 COPY --from=base --chown=nodejs:nodejs $APP_PATH/.sequelizerc ./.sequelizerc
 COPY --from=base --chown=nodejs:nodejs $APP_PATH/node_modules ./node_modules
 COPY --from=base --chown=nodejs:nodejs $APP_PATH/package.json ./package.json
+# This slim base image ships without CA certificates, and Debian mirrors may
+# redirect plain HTTP to HTTPS. Without a usable trust store that redirect
+# fails with "certificate verify failed" (error:0A000086). Reuse the trust
+# store already installed by the build stage instead of fetching it again
+# (local copies, no network access). All three paths are required: openssl's
+# default CA location /usr/lib/ssl is entirely absent from the slim image, so
+# copying /etc/ssl alone still leaves apt unable to verify TLS.
+COPY --from=base /etc/ssl /etc/ssl
+COPY --from=base /usr/lib/ssl /usr/lib/ssl
+COPY --from=base /usr/share/ca-certificates /usr/share/ca-certificates
+# a local copy and needs no network access.
+COPY --from=base /etc/ssl/certs /etc/ssl/certs
+COPY --from=base /usr/share/ca-certificates /usr/share/ca-certificates
 # Install wget to healthcheck the server
 RUN if [ -n "$DEBIAN_MIRROR" ]; then \
       for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
