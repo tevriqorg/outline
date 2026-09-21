@@ -12,6 +12,7 @@ import type { Option } from "~/components/InputSelect";
 import { InputSelect } from "~/components/InputSelect";
 import Text from "~/components/Text";
 import useStores from "~/hooks/useStores";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import useUserLocale from "~/hooks/useUserLocale";
 import { dateToExpiry } from "~/utils/date";
 import ExpiryDatePicker from "./components/ExpiryDatePicker";
@@ -33,9 +34,27 @@ function ApiKeyNew({ onSubmit }: Props) {
   );
   const [isSaving, setIsSaving] = React.useState(false);
 
-  const { apiKeys } = useStores();
+  const { apiKeys, users } = useStores();
+  const currentUser = useCurrentUser();
+  const [userId, setUserId] = React.useState(currentUser.id);
   const { t } = useTranslation();
   const userLocale = useUserLocale();
+
+  React.useEffect(() => {
+    if (currentUser.isAdmin) {
+      void users.fetchAll({ limit: 100, sort: "name", direction: "ASC" });
+    }
+  }, [currentUser.isAdmin, users]);
+
+  const ownerOptions = React.useMemo<Option[]>(
+    () =>
+      users.active.map((user) => ({
+        type: "item",
+        label: user.name,
+        value: user.id,
+      })),
+    [users.active]
+  );
 
   const submitDisabled =
     isSaving || !name || (!expiresAt && expiryType !== ExpiryType.NoExpiration);
@@ -81,6 +100,7 @@ function ApiKeyNew({ onSubmit }: Props) {
 
       try {
         await apiKeys.create({
+          userId,
           name,
           expiresAt: expiresAt?.toISOString(),
           scope: scope ? scope.split(/[\s,]+/).filter(Boolean) : undefined,
@@ -97,12 +117,20 @@ function ApiKeyNew({ onSubmit }: Props) {
         setIsSaving(false);
       }
     },
-    [t, name, scope, expiresAt, onSubmit, apiKeys]
+    [t, userId, name, scope, expiresAt, onSubmit, apiKeys]
   );
 
   return (
     <form onSubmit={handleSubmit}>
       <Flex column>
+        {currentUser.isAdmin && (
+          <InputSelect
+            options={ownerOptions}
+            value={userId}
+            onChange={setUserId}
+            label={t("Owner")}
+          />
+        )}
         <Input
           type="text"
           label={t("Name")}

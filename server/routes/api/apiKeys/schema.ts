@@ -18,6 +18,8 @@ const normalizeScope = (scope: string) =>
 
 export const APIKeysCreateSchema = BaseSchema.extend({
   body: z.object({
+    /** The owner of the API key. Admins may create keys for another user. */
+    userId: z.uuid().optional(),
     /** API Key name */
     name: z
       .string()

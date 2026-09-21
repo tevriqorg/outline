@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import { CodeIcon } from "outline-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
+import { TeamPreference } from "@shared/types";
 import { useHistory, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { Action } from "~/components/Actions";
@@ -12,6 +13,7 @@ import Heading from "~/components/Heading";
 import InputSearch from "~/components/InputSearch";
 import Scene from "~/components/Scene";
 import Text from "~/components/Text";
+import Switch from "~/components/Switch";
 import { createApiKey } from "~/actions/definitions/apiKeys";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
 import usePolicy from "~/hooks/usePolicy";
@@ -20,6 +22,8 @@ import useStores from "~/hooks/useStores";
 import { useTableRequest } from "~/hooks/useTableRequest";
 import { ApiKeysTable } from "./components/ApiKeysTable";
 import { StickyFilters } from "./components/StickyFilters";
+import SettingRow from "./components/SettingRow";
+import UserFilter from "~/scenes/Search/components/UserFilter";
 
 function ApiKeys() {
   const team = useCurrentTeam();
@@ -33,6 +37,7 @@ function ApiKeys() {
 
   const reqParams = useMemo(
     () => ({
+      userId: params.get("userId") || undefined,
       query: params.get("query") || undefined,
       sort: params.get("sort") || "createdAt",
       direction: (params.get("direction") || "desc").toUpperCase() as
@@ -78,6 +83,28 @@ function ApiKeys() {
       });
     },
     [params, history, location.pathname]
+  );
+
+  const handleUserFilter = useCallback(
+    (userId: string | undefined) => updateParams("userId", userId ?? ""),
+    [updateParams]
+  );
+
+  const handleMembersCanCreateApiKeyChange = useCallback(
+    async (checked: boolean) => {
+      try {
+        await team.save({
+          preferences: {
+            ...team.preferences,
+            [TeamPreference.MembersCanCreateApiKey]: checked,
+          },
+        });
+        toast.success(t("Settings saved"));
+      } catch {
+        toast.error(t("Could not save settings"));
+      }
+    },
+    [team, t]
   );
 
   const handleSearch = useCallback(
@@ -133,7 +160,28 @@ function ApiKeys() {
           }}
         />
       </Text>
+      {can.update && (
+        <SettingRow
+          label={t("Allow members to create API keys")}
+          name={TeamPreference.MembersCanCreateApiKey}
+          description={t(
+            "When disabled, only workspace admins can create API keys."
+          )}
+        >
+          <Switch
+            checked={
+              !!team.preferences[TeamPreference.MembersCanCreateApiKey]
+            }
+            onChange={handleMembersCanCreateApiKeyChange}
+          />
+        </SettingRow>
+      )}
       <StickyFilters>
+        <UserFilter
+          userId={reqParams.userId}
+          anyLabel={t("All users")}
+          onSelect={handleUserFilter}
+        />
         <InputSearch
           short
           value={query}

@@ -136,6 +136,37 @@ describe("#apiKeys.create", () => {
     const res = await server.post("/api/apiKeys.create");
     expect(res.status).toEqual(401);
   });
+
+  it("should allow an admin to create an api key for another user", async () => {
+    const admin = await buildAdmin();
+    const user = await buildUser({ teamId: admin.teamId });
+
+    const res = await server.post("/api/apiKeys.create", admin, {
+      body: {
+        userId: user.id,
+        name: "Managed API Key",
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.name).toEqual("Managed API Key");
+    expect(body.data.user.id).toEqual(user.id);
+  });
+
+  it("should not allow a member to create an api key for another user", async () => {
+    const user = await buildUser();
+    const other = await buildUser({ teamId: user.teamId });
+
+    const res = await server.post("/api/apiKeys.create", user, {
+      body: {
+        userId: other.id,
+        name: "Managed API Key",
+      },
+    });
+
+    expect(res.status).toEqual(403);
+  });
 });
 
 describe("#apiKeys.list", () => {
