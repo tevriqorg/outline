@@ -21,6 +21,10 @@ import useQuery from "~/hooks/useQuery";
 import useStores from "~/hooks/useStores";
 import { useTableRequest } from "~/hooks/useTableRequest";
 import { ApiKeysTable } from "./components/ApiKeysTable";
+import {
+  membersCanCreateApiKey,
+  membersCanCreateApiKeyUpdate,
+} from "./apiKeyPreferences";
 import { StickyFilters } from "./components/StickyFilters";
 import SettingRow from "./components/SettingRow";
 import UserFilter from "~/scenes/Search/components/UserFilter";
@@ -93,12 +97,7 @@ function ApiKeys() {
   const handleMembersCanCreateApiKeyChange = useCallback(
     async (checked: boolean) => {
       try {
-        await team.save({
-          preferences: {
-            ...(team.preferences ?? {}),
-            [TeamPreference.MembersCanCreateApiKey]: checked,
-          },
-        });
+        await team.save(membersCanCreateApiKeyUpdate(team, checked));
         toast.success(t("Settings saved"));
       } catch {
         toast.error(t("Could not save settings"));
@@ -169,9 +168,7 @@ function ApiKeys() {
           )}
         >
           <Switch
-            checked={
-              !!team.preferences?.[TeamPreference.MembersCanCreateApiKey]
-            }
+            checked={membersCanCreateApiKey(team)}
             onChange={handleMembersCanCreateApiKeyChange}
           />
         </SettingRow>
