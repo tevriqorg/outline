@@ -1,0 +1,137 @@
+name: P19 Outline image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'Dockerfile.base'
+      - 'package.json'
+      - 'yarn.lock'
+      - '.yarnrc.yml'
+      - 'patches/**'
+      - 'app/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'plugins/**'
+      - 'public/**'
+      - '.sequelizerc'
+      - '.github/workflows/p19-outline-image.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Exact commit/ref to build; empty uses the triggering ref'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: p19-outline-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  P19_OUTLINE_IMAGE: ghcr.io/${{ github.repository_owner }}/p19-outline
+
+jobs:
+  build-amd64:
+    name: P19 amd64 image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Resolve immutable source identity
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          test "${#sha}" -eq 40
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build P19 Outline base
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build \
+            --build-arg NODE_MAX_OLD_SPACE_SIZE=12288 \
+            --tag "p19-outline-base:$SOURCE_SHA" \
+            --file Dockerfile.base \
+            .
+
+      - name: Build P19 Outline runtime
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build \
+            --build-arg "BASE_IMAGE=p19-outline-base:$SOURCE_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --tag "$P19_OUTLINE_IMAGE:$SOURCE_SHA" \
+            --file Dockerfile \
+            .
+
+      - name: Push immutable runtime image
+        id: publish
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker push "$P19_OUTLINE_IMAGE:$SOURCE_SHA"
+          repo_digest="$(docker image inspect "$P19_OUTLINE_IMAGE:$SOURCE_SHA" --format '{{index .RepoDigests 0}}')"
+          test -n "$repo_digest"
+          digest="${repo_digest##*@}"
+          test "${digest#sha256:}" != "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "repo_digest=$repo_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Verify published image identity
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect "$P19_OUTLINE_IMAGE:$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+          docker buildx imagetools inspect "$P19_OUTLINE_IMAGE@$IMAGE_DIGEST"
+
+      - name: Record P19 image metadata
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image_bytes="$(docker image inspect "$P19_OUTLINE_IMAGE:$SOURCE_SHA" --format '{{.Size}}')"
+          printf '{\n  "repository": "%s",\n  "source_sha": "%s",\n  "image": "%s",\n  "digest": "%s",\n  "local_uncompressed_bytes": %s\n}\n' \
+            "$GITHUB_REPOSITORY" "$SOURCE_SHA" "$P19_OUTLINE_IMAGE" "$IMAGE_DIGEST" "$image_bytes" \
+            > p19-outline-image.json
+          cat p19-outline-image.json
+
+      - name: Upload image metadata
+        uses: actions/upload-artifact@v5
+        with:
+          name: p19-outline-image-${{ steps.source.outputs.short }}
+          path: p19-outline-image.json
+          if-no-files-found: error
+          retention-days: 30

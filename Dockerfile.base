@@ -13,11 +13,14 @@ COPY ./patches ./patches
 
 RUN if [ -n "$DEBIAN_MIRROR" ]; then \
       for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
-        if [ -f "$f" ]; then sed -i -E "s|https?://deb\.debian\.org|${DEBIAN_MIRROR}|g" "$f"; fi; \
+        if [ -f "$f" ]; then sed -i -E "s|https?://deb\\.debian\\.org|${DEBIAN_MIRROR}|g" "$f"; fi; \
       done; \
     fi && \
     apt-get update && apt-get install -y cmake
-ENV NODE_OPTIONS="--max-old-space-size=24000"
+# Keep the upstream 24 GiB default, but let constrained builders select a
+# smaller heap without maintaining a divergent Dockerfile.
+ARG NODE_MAX_OLD_SPACE_SIZE=24000
+ENV NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"
 
 RUN NPM_CONFIG_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}" npm install -g corepack
 RUN corepack enable
