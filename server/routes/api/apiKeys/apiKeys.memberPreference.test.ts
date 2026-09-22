@@ -149,6 +149,32 @@ describe("membersCanCreateApiKey preference", () => {
     );
     expect(reloaded.getPreference(TeamPreference.PublicBranding)).toBe(true);
   });
+
+  it("keeps other stored preferences when only one is sent", async () => {
+    // The UI now sends only the toggled key, relying on teamUpdater treating
+    // `preferences` as a partial patch. If that ever stopped holding, omitting
+    // a key would silently reset it.
+    const team = await buildTeam({
+      preferences: { [TeamPreference.PublicBranding]: true },
+    });
+    const admin = await buildAdmin({ teamId: team.id });
+
+    const res = await server.post("/api/team.update", admin, {
+      body: {
+        preferences: {
+          [TeamPreference.MembersCanCreateApiKey]: false,
+        },
+      },
+    });
+
+    expect(res.status).toEqual(200);
+
+    const reloaded = await reloadTeam(team.id);
+    expect(reloaded.getPreference(TeamPreference.MembersCanCreateApiKey)).toBe(
+      false
+    );
+    expect(reloaded.getPreference(TeamPreference.PublicBranding)).toBe(true);
+  });
 });
 
 describe("member API key policy", () => {

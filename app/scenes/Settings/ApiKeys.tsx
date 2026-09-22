@@ -97,7 +97,7 @@ function ApiKeys() {
   const handleMembersCanCreateApiKeyChange = useCallback(
     async (checked: boolean) => {
       try {
-        await team.save(membersCanCreateApiKeyUpdate(team, checked));
+        await team.save(membersCanCreateApiKeyUpdate(checked));
         toast.success(t("Settings saved"));
       } catch {
         toast.error(t("Could not save settings"));
