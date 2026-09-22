@@ -1,0 +1,54 @@
+name: QQ network probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/qq-network-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download and measure QQ File Flash Transfer
+        shell: bash
+        run: |
+          set -uo pipefail
+          SHARE='https://qfile.qq.com/q/XVVRRj34Qs'
+          python3 - <<'PY'
+          import re, urllib.request, time, hashlib, json
+          share="https://qfile.qq.com/q/XVVRRj34Qs"
+          req=urllib.request.Request(share,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              html=r.read().decode("utf-8","replace")
+              print("SHARE status=%s html_bytes=%d final=%s"%(r.status,len(html),r.geturl()))
+          urls=re.findall(r'https?[^"\\\\\s<>]+',html)
+          urls=[u.replace('\\u002F','/').replace('\\/','/') for u in urls]
+          cand=[]
+          for u in urls:
+              if any(x in u for x in ("multimedia.qfile.qq.com","download","dldir")) and u not in cand:
+                  cand.append(u)
+          print("CANDIDATES",json.dumps(cand[:20],ensure_ascii=False))
+          if not cand: raise SystemExit("NO_DOWNLOAD_URL")
+          last=None
+          for url in cand:
+              try:
+                  req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Referer":share})
+                  t=time.perf_counter(); first=None; n=0; h=hashlib.sha256()
+                  with urllib.request.urlopen(req,timeout=120) as r:
+                      print("DOWNLOAD status=%s length=%s final=%s"%(r.status,r.headers.get("Content-Length"),r.geturl()))
+                      while True:
+                          chunk=r.read(1024*1024)
+                          if not chunk: break
+                          if first is None: first=time.perf_counter()
+                          n+=len(chunk); h.update(chunk)
+                  end=time.perf_counter(); sec=end-t
+                  print("RESULT bytes=%d MiB=%.2f seconds=%.3f TTFB=%.3f MBps=%.3f Mbps=%.3f sha256=%s"%(n,n/1048576,sec,(first-t) if first else -1,n/sec/1e6,n/sec*8/1e6,h.hexdigest()))
+                  if n>100*1024*1024: raise SystemExit(0)
+              except SystemExit: raise
+              except Exception as e:
+                  print("candidate_error",repr(e)); last=e
+          raise SystemExit("DOWNLOAD_FAILED "+repr(last))
+          PY
