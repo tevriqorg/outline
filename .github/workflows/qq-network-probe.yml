@@ -16,7 +16,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm i playwright@1.55.0 >/dev/null 2>&1
           npx playwright install chromium >/dev/null 2>&1
-          cat > /tmp/probe.js <<'JS'
+          cat > probe.js <<'JS'
           const { chromium } = require('playwright');
           const { performance } = require('perf_hooks');
           const crypto = require('crypto');
@@ -65,4 +65,4 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
-          node /tmp/probe.js
+          node probe.js
