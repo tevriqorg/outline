@@ -42,51 +42,64 @@ describe("membersCanCreateApiKey", () => {
       )
     ).toBe(true);
   });
+
+  it("ignores unrelated stored preferences", () => {
+    expect(
+      membersCanCreateApiKey(
+        buildTeam({ [TeamPreference.PublicBranding]: false })
+      )
+    ).toBe(true);
+  });
 });
 
 describe("membersCanCreateApiKeyUpdate", () => {
   it("sends false when the value is turned off from the default", () => {
-    const { preferences } = membersCanCreateApiKeyUpdate(
-      buildTeam(undefined),
-      false
-    );
+    const { preferences } = membersCanCreateApiKeyUpdate(false);
 
     expect(preferences[TeamPreference.MembersCanCreateApiKey]).toBe(false);
   });
 
   it("sends true when the value is turned back on", () => {
-    const team = buildTeam({ [TeamPreference.MembersCanCreateApiKey]: false });
-
-    const { preferences } = membersCanCreateApiKeyUpdate(team, true);
+    const { preferences } = membersCanCreateApiKeyUpdate(true);
 
     expect(preferences[TeamPreference.MembersCanCreateApiKey]).toBe(true);
   });
 
-  it("preserves unrelated stored preferences", () => {
-    const team = buildTeam({
-      [TeamPreference.MembersCanCreateApiKey]: true,
-      [TeamPreference.SeamlessEdit]: false,
-    });
+  it("sends only the changed preference", () => {
+    // Omitted keys are preserved server-side by teamUpdater, so the payload
+    // must not echo other preferences back over concurrent changes.
+    const { preferences } = membersCanCreateApiKeyUpdate(false);
 
-    const { preferences } = membersCanCreateApiKeyUpdate(team, false);
-
-    expect(preferences).toEqual({
-      [TeamPreference.MembersCanCreateApiKey]: false,
-      [TeamPreference.SeamlessEdit]: false,
-    });
+    expect(Object.keys(preferences)).toEqual([
+      TeamPreference.MembersCanCreateApiKey,
+    ]);
   });
 
   it("round-trips through the model so the switch reflects the new value", () => {
     const team = buildTeam(undefined);
 
-    // The server echoes the saved preferences back, so applying the payload
-    // must be enough for the switch to read the new value.
-    team.updateData(membersCanCreateApiKeyUpdate(team, false));
-
+    // The server echoes the full preferences back, so applying the saved
+    // payload must be enough for the switch to read the new value.
+    team.updateData(membersCanCreateApiKeyUpdate(false));
     expect(membersCanCreateApiKey(team)).toBe(false);
 
-    team.updateData(membersCanCreateApiKeyUpdate(team, true));
-
+    team.updateData(membersCanCreateApiKeyUpdate(true));
     expect(membersCanCreateApiKey(team)).toBe(true);
+  });
+
+  it("does not disturb other preferences once the server response is applied", () => {
+    const team = buildTeam({ [TeamPreference.PublicBranding]: true });
+
+    // teamUpdater keeps keys it does not write, and presentTeam echoes the
+    // merged object back, so the response carries every stored preference.
+    team.updateData({
+      preferences: {
+        [TeamPreference.PublicBranding]: true,
+        ...membersCanCreateApiKeyUpdate(false).preferences,
+      },
+    });
+
+    expect(membersCanCreateApiKey(team)).toBe(false);
+    expect(team.getPreference(TeamPreference.PublicBranding)).toBe(true);
   });
 });
